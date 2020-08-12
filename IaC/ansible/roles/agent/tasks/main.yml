@@ -1,0 +1,30 @@
+---
+############################################################
+# Packages Install 
+############################################################
+- name: Install Zabbix Agent Packages
+  yum:
+    name: "{{ agent.zabbix_packages }}"
+    state: present
+
+
+############################################################
+# Edit Config File
+############################################################   
+- name: Configure zabbix_agentdr.conf
+  template:
+    src: templates/zabbix_agentd.conf.j2
+    dest: /etc/zabbix/zabbix_agentd.conf
+    owner: root
+    group: zabbix
+
+
+############################################################
+# Start Service
+############################################################  
+- name: Restart Zabbix Related Services
+  systemd:
+    name: "{{ item }}"
+    state: restarted
+    enabled: yes
+  with_items: "{{ agent.service }}"

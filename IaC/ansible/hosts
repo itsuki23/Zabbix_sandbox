@@ -1,0 +1,13 @@
+[zabbix_server]
+13.231.38.46
+
+[zabbix_proxy]
+
+[zabbix_agent]
+
+[control_node:children]
+zabbix_server
+
+[target_node:children]
+zabbix_proxy
+zabbix_agent

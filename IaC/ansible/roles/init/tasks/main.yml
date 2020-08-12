@@ -1,0 +1,27 @@
+---
+############################################################
+# YUM 
+############################################################
+- name: yum update
+  become: yes
+  yum:
+    name: '*'
+    state: present    # latest後
+
+
+############################################################
+# Zabbix Repository 
+############################################################
+- name: Enable Zabbix repo
+  yum:
+    name: "{{ zabbix_repo_url }}"
+    state: present
+
+
+############################################################
+# SELinux -> already disabled
+############################################################
+# - name: Disable SELinux
+#   selinux:
+#     sate: disabled
+#   notify: Restart to Apply Configration

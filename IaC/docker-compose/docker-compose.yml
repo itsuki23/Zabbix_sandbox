@@ -1,0 +1,56 @@
+version: "3"
+services:
+  zabbix_db:
+    image: mysql:5.7
+    environment:
+      - MYSQL_DATABASE=${DB_NAME}
+      - MYSQL_USER=${DB_USER}
+      - MYSQL_PASSWORD=${DB_USER_PASSWORD}
+      - MYSQL_ROOT_PASSWORD=${DB_ROOT_PASSWORD}
+  
+  zabbix_server:
+    image: zabbix/zabbix-server-mysql:${OS}-${VERSION}
+    environment:
+      # dbコンテナと同じ部分
+      - MYSQL_DATABASE=${DB_NAME}
+      - MYSQL_USER=${DB_USER}
+      - MYSQL_PASSWORD=${DB_USER_PASSWORD}
+      - MYSQL_ROOT_PASSWORD=${DB_ROOT_PASSWORD}
+      # データホスト（保存先）の指定とログレベル指定
+      - DB_SERVER_HOST=zabbix_db
+      - ZBX_DEBUGLEVBEL=${LOG_LEVEL}
+    ports:
+      - "10051:10051"
+    # この記述でdbコンテナと疎通できる
+    links:
+      - zabbix_db
+
+  # webブラウザ側
+  zabbix_web:
+    image: zabbix/zabbix-web-apache-mysql:${OS}-${VERSION}
+    environment:
+      # dbコンテナと同じ部分
+      - MYSQL_DATABASE=${DB_NAME}
+      - MYSQL_USER=${DB_USER}
+      - MYSQL_PASSWORD=${DB_USER_PASSWORD}
+      - MYSQL_ROOT_PASSWORD=${DB_ROOT_PASSWORD}
+      # サーバーホスト指定とデータホスト指定とタイムゾーン指定
+      - ZBX_SERVER_HOST=zabbix_server
+      - DB_SERVER_HOST=zabbix_db
+      - PHP_TZ=${TME_ZONE}
+    ports:
+      - ${HTTP_PORT}:80
+    links:
+      - zabbix_server
+      - zabbix_db
+
+  zabbix_agent:
+    image: zabbix/zabbix-agent:${OS}-${VERSION}
+    # build後にコンテナloginしてsystemctlを実行したい場合はtrue
+    privileged: true
+    environment:
+      - ZBX_SERVER_HOST=zabbix_server
+    expose:
+      - "10050"
+    links:
+      - zabbix_server

@@ -1,0 +1,37 @@
+---
+- name:  Zabbix Server
+  hosts: zabbix_server
+  become: yes
+  roles:
+    - { role: init, tags: init }
+    - { role: server, tags: server }
+  # vars:
+  #   __:
+
+
+# - name:  Zabbix Proxy
+#   hosts: zabbix_proxy
+#   become: yes
+#   roles:
+#     - { role: init, tags: init }
+#     - { role: proxy , tags: proxy  }
+#   # vars:
+#   #   __:   
+
+
+# # hosts記載のIPに複数同時実行
+# - name:  Zabbix Agent
+#   hosts: zabbix_agent
+#   become: yes
+#   roles:
+#     - { role: init, tags: init }
+#     - { role: agent , tags: agent  }
+#   # vars:
+#   #   __:
+
+
+############################################################
+# $ ansible-playbook -i hosts playbook.yml --tags=***
+############################################################
+
+

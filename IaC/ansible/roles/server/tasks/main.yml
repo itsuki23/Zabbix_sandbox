@@ -1,0 +1,93 @@
+---
+############################################################
+# Packages Install 
+############################################################
+- name: Install Zabbix Server Packages
+  yum:
+    name: "{{ server.zabbix_packages }}"
+    state: present
+
+- name: Install MySQL Packages
+  yum:
+    name: "{{ server.mysql_packages }}"
+    state: present 
+
+
+############################################################
+# Server Dabatase Edit 
+############################################################
+- name: Create Database
+  mysql_db:
+    login_user: "{{ server.rds_mysql_user }}"
+    login_password: "{{ server.rds_mysql_password }}"
+    login_host: "{{ server.rds_endpoint }}"
+
+    name: "{{ server.db_name }}"
+    state: present
+    encoding: utf8
+    collation: utf8_bin
+
+- name: Create DBUser with GANT Option
+  mysql_user:
+    login_user: "{{ server.rds_mysql_user }}"
+    login_password: "{{ server.rds_mysql_password }}"
+    login_host: "{{ server.rds_endpoint }}"
+
+    name: "{{ server.db_user }}"
+    state: present
+    password: "{{ server.db_password }}"
+    priv: 'zabbix.*:ALL,GRANT'
+
+
+############################################################
+# Edit Config File for Connect RDS
+############################################################
+# 既にzabbix database用意してたからエラーに。次回サラのDBで確認。   
+# - name: Import Schema for Configure Zabbix DB
+#   # shell: zcat /usr/share/doc/zabbix-server-mysql*/create.sql.gz | mysql -u {{ server.rds_mysql_user }} -h {{ server.rds_endpoint }} -p{{ server.rds_mysql_password }} zabbix
+#   shell: zcat /usr/share/doc/zabbix-server-mysql*/create.sql.gz | mysql -u {{ server.rds_mysql_user }} -h {{ server.rds_endpoint }} -p{{ server.rds_mysql_password }} zabbix
+
+# - name: Import Schema for Configure Zabbix DB
+#   expect:
+#     command: zcat /usr/share/doc/zabbix-server-mysql*/create.sql.gz | mysql -u {{ server.rds_mysql_user }} -h {{ server.rds_endpoint }} -p zabbix
+#     responses:
+#       "^Enter Password: .*": "password"
+# expectモジュールを使用したかったがうまくいかず
+#         EC2/ $ sudo yum install python3 -y
+# ansible.cfg/ ansible_python_interpreter: /usr/bin/python3
+
+- name: Configure zabbix_server.conf
+  template:
+    src: templates/zabbix_server.conf.j2
+    dest: /etc/zabbix/zabbix_server.conf
+    owner: root
+    group: zabbix
+
+
+############################################################
+# Set WebUI Ja & Timezone
+############################################################ 
+- name: Set Japanese at Zabbix WebUI
+  shell: localedef -f UTF-8 -i ja_JP ja_JP
+
+- name: set timezone
+  lineinfile:
+    dest: /etc/php.ini
+    backrefs: yes
+    regexp: "{{ item.regexp}}"
+    line: "{{ item.line }}"
+  with_items: "{{ server.php_config }}"
+
+
+############################################################
+# Start Service
+############################################################ 
+- name: Restart Zabbix Related Services
+  become: yes
+  systemd:
+    name: "{{ item }}"
+    state: restarted
+    enabled: yes
+  with_items: "{{ server.service }}"
+  # zabbix-serverだけエラー
+  # Job for zabbix-server.service failed because the control process exited with error code. See "systemctl status zabbix-server.service" and "journalctl -xe" for details.
