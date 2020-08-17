@@ -4,7 +4,7 @@
 # EC2
 メトリクス　https://docs.aws.amazon.com/ja_jp/AWSEC2/latest/UserGuide/viewing_metrics_with_cloudwatch.html
 
-Diskサイズとともにで決まることが多い
+Diskサイズとともに決まることが多い
   IOPS（Input Output Per Second)
   スループット　１秒間のデータ転送量（MB/秒）
 ```
@@ -45,20 +45,24 @@ StatusCheck　[Failed(両方), Failed_Instance, Failed_System]	(単位: カウ�
 ★初動チェック　AWS側の問題か？(system)  インスタンス内の問題か？(instance)
 ```
 
+# RDS
+https://docs.aws.amazon.com/ja_jp/AmazonRDS/latest/UserGuide/MonitoringOverview.html
 
+# ALB
+https://docs.aws.amazon.com/ja_jp/elasticloadbalancing/latest/application/load-balancer-cloudwatch-metrics.html
+
+
+
+
+
+
+# Memo
 ```
-<Web_server>
-CPUUtilization
-DiskReadBytes
-DiskWriteBytes
-NetworkIn
-NetworkOut
-
 単位
 %　　　　 ９０％でアラート
 カウント　異常性でアラート
 バイト　　異常性でアラート　ベースライン
-
+```
 
 
 

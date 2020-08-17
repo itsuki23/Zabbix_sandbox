@@ -1,10 +1,13 @@
-# Zabbix Conf
+
+
+# Construction
 ```
+<Construction>
 HostGroup / Host
               ↑
             Template(ミドルウェア、アプリ)
               ↑
-            Application
+            Application(cpu, memory, log... )
            　 │
            　 ├── item
            　 │    │ └── triger ── action
@@ -14,33 +17,7 @@ HostGroup / Host
            　 └── web
 ```
 
-# Flow
-```
-・監視項目の洗い出し。
-・監視項目に対応したKeyを調べる。ない場合はUserParameterで定義。
-・ZabbixServerもしくはproxyからのzabbix_getコマンドで値取得を確認。
-・ZabbixWebでアイテムの設定。値を取得できることを確認。
-・トリガーを設定。テストアラートを発報してみる。
-```
-```
-＜共通事項＞
-　プロセスは起動しているか
-　ネットワークの疎通、速度は問題ないか
-　CPU・メモリ・ディスク監視の閾値は異常ではないか
-　時刻同期できているか
-　監視エージェントのログにエラーがでていないか
 
-＜Webサーバー＞
-　ページが見れない　　　　　　　　　　　（名前解決・URL間違い）
-　ページの表示が遅い　　　　　　　　　　（ネットワークスループット？Diskが不適切か、CDNを挟むか）
-　ページのコンテンツの読み込みが遅い　　（キャッシュレイヤーを挟むことも検討）
-　変なページが読み込まれる　　　　　　　（セキュリティ脆弱性・提供者の間違い）
-　時間によって速さが違ったりおそくないか（スケジューリングによるオートスケールの検討）
-　各種ログ
-
-＜Mysql＞
-　マスター、スレーブそれぞれの役割でレプリケーションできているか
-```
 　
 
 # Definition
@@ -57,68 +34,87 @@ HostGroup / Host
 Template Basic
 --------------------------------------------------------------------
 [item]
-    Basic cpu                : system.cpu.util[,user]  × Linux_OSで定義済
-    Basic Load Average 15min : system.cpu.load[,avg15]
-    Basic Memory size        : vm.memory.size[free]
-    Basic Disk Size          : vfs.fs.size[/,pused]
-    Basic process SSHD       : proc.num[sshd]
-    Basic port 22            : net.tcp.listen[22]
-    Basic log Zbx Agent      : log[/var/log/zabbix/zabbix_agentd.log]  (※Active)
-    item MYK Local Time Sync : system.localtime
+    cpu                : system.cpu.util[,user]  × Linux_OSで定義済
+    Load Average 15min : system.cpu.load[,avg15]
+    Memory size        : vm.memory.size[free]
+    Disk Size          : vfs.fs.size[/,pused]
+    process SSHD       : proc.num[sshd]
+    port 22            : net.tcp.listen[22]
+    log Zbx Agent      : log[/var/log/zabbix/zabbix_agentd.log]  (※Active)
+    Local Time Sync    : system.localtime        × Linux_OSで定義済
 
 [triger]
-    Basic cpu over 80%            : 障害条件 {Template Basic:system.cpu.util[,user].last(#3)}>=80
-                                    復旧条件 {Templaet Basic:system.cppu.util[,user].last(#3)}<60
-    Basic prosess SSHD non-active : 障害条件 {Template Basic:proc.num[sshd]}=0
-                                    復旧条件 {Templaet Basic:proc.num[sshd]}=1
+    cpu over 80%            : { * :system.cpu.util[,user].last(#3)}>80  復旧 <60  × Linux_OSで定義済
+    Load Average 15min > 2  : { * :system.cpu.load[,avg15].last()}>2    復旧 <0
+    Disk Size over 80%      : { * :vfs.fs.size[/,pused].last()}>80      復旧 <60
+    prosess SSHD non-active : { * :proc.num[sshd].last()}=0             復旧 =1
+    port 22 close           : { * :net.tcp.listen[22].last()}=0         復旧 =1
 
-    Basic Time Sync diff 3s       : {Template Basic:system.localtime.fuzzytime(3)}=0
-    Basic Agent log "error" 5/10m : {Template Basic:log[/var/log/zabbix/zabbix_agentd.log].str("error")}=1
-                                    and
-                                    {Template Basic:log[/var/log/zabbix/zabbix_agentd.log].count(10m,"error")}>5
-    Basic Agent log nodata 5m     : {Template Basic:log[/var/log/zabbix/zabbix_agentd.log].nodata(5m)}=0
-                                    # Check ActiveCheck (RefreshActiveChecks: default 120s)
+    Time Sync diff 3s       : { * :system.localtime.fuzzytime(3)}=0               × Linux_OSで定義済
+    Agent log "error" 5/10m : { * :log[/var/log/zabbix/zabbix_agentd.log].str("error")}=1
+                              and
+                              { * :log[/var/log/zabbix/zabbix_agentd.log].count(10m,"error")}>5
+    Agent log nodata 5m     : { * :log[/var/log/zabbix/zabbix_agentd.log].nodata(5m)}=0
+                              # Check ActiveCheck (RefreshActiveChecks: default 120s)
 --------------------------------------------------------------------
 Template Web_Nginx
 --------------------------------------------------------------------
 [item]
-    Web_Nginx process HTTP     : proc.num[http]
-    Web_Nginx port 80          : net.tcp.lisWeb
-    Web_Nginx Nginx access log : log[/var/log/nginx/access.log] (※Active)(今回dockerなので無効化)
-    Web_Nginx Nginx error log  : log[/var/log/nginx/error.log]　(※Active)(今回dockerなので無効化)
---------------------------------------------------------------------
-Template DB_MySQL_Master
---------------------------------------------------------------------
-[item]
-    DB_Master mysqk $1で指定↓
-    DB_Master mysql Seconds_Behind_Master : mysql.slave.status[Seconds_Behind_Master]
-    DB_Master mysql Read_Master_Log_Pos   : mysql.slave.status[Read_Master_Log_Pos]
-    DB_Master mysql Master_Log_File       : mysql.slave.status[Master_Log_File]
-    DB_Master mysql Slave_SQL_Running     : mysql.slave.status[Slave_SQL_Running]
-    DB_Master mysql Slave_IO_Running      : mysql.slave.status[Slave_IO_Running]
-
-    DB_Master process MySQL   : proc.num[mysql]
-    DB_Master port 3306       : net.tcp.listen[3306]
-    DB_Master Mysql error log : log[/var/log/mysqld.log]  (※Active)
-[triger]
-
---------------------------------------------------------------------
-Template DB_MySQL_Slave
---------------------------------------------------------------------
-[item]
-    DB_Slave mysqk $1で指定↓
-    DB_Slave mysqk File       : mysql.master.status[File]
-    DB_Slave mysqk Position   : mysql.master.status[Position]
-
-    DB_Slave process MySQL    : proc.num[mysql]
-    DB_Slave port 3306        : net.tcp.listen[3306]
-    DB_Slave Mysql error log  : log[/var/log/mysqld.log]  (※Active)
+    process HTTP     : proc.num[nginx]
+    port 80          : net.tcp.lisWeb
+    Nginx access log : log[/var/log/nginx/access.log] (※Active)(今回dockerなので無効化)
+    Nginx error log  : log[/var/log/nginx/error.log]　(※Active)(今回dockerなので無効化)
 
 [triger]
-    DB_Slave IO_Running       : {<Template_name>:mysql.slave.status[Slave_IO_Running].regexp(Yes)}=0
+    prosess Nginx non-active : { * :proc.num[sshd].last()}=0       復旧 =1
+    port 80 close            : { * :net.tcp.listen[22].last()}=0   復旧 =1
+    log ...今回コンテナなので略（標準出力でファイルに書きだして、そこを読むようにするべきか）
 
 --------------------------------------------------------------------
-※今回は抜粋して確認。Triger...
+Template DB_MySQL_master
+--------------------------------------------------------------------
+[item]
+    mysql $1で指定↓
+    mysql File       : mysql.master.status[File]
+    mysql Position   : mysql.master.status[Position]
+
+    process MySQL    : proc.num[mysqld]
+    port 3306        : net.tcp.listen[3306]
+    Mysql error log  : log[/var/log/mysqld.log]  (※Active)
+
+[triger]
+    Master status [File] ≒ [ip-10-0-21-20-bin...] : { * :mysql.master.status[File].str(File: ip-10-0-21-20-bin)}=0  復旧 =1
+    Master status [Position] ≒ [Position...]      : { * ::mysql.master.status[Position].str(Position)}=0            復旧 =1
+    process MySQL non-active                       : { * :proc.num[mysqld].last()}=0      復旧 =1
+    port 3306 listen close                         : { * :net.tcp.listen[3306].last()}=0  復旧 =1
+    Mysql error log alert [error]                  : { * :log[/var/log/mysqld.log].str(error)}=1  (※Active)
+
+--------------------------------------------------------------------
+Template DB_MySQL_slave
+--------------------------------------------------------------------
+[item]
+    $1で指定↓
+    Seconds_Behind_Master : mysql.slave.status[Seconds_Behind_Master]
+    Read_Master_Log_Pos   : mysql.slave.status[Read_Master_Log_Pos]   結果→「4379785」など。どうアラート設定するのか？
+    Master_Log_File       : mysql.slave.status[Master_Log_File]
+    Slave_SQL_Running     : mysql.slave.status[Slave_SQL_Running]
+    Slave_IO_Running      : mysql.slave.status[Slave_IO_Running]
+
+    process MySQL   : proc.num[mysql]
+    port 3306       : net.tcp.listen[3306]
+    Mysql error log : log[/var/log/mysqld.log]  (※Active)
+
+[triger]
+    Slave status behind ≒ [0]                   : { * :mysql.slave.status[Seconds_Behind_Master].str(0)}=0
+    Slave status Log_Pos ≒ [number]             : { * :mysql.slave.status[Read_Master_Log_Pos]...???
+    Slave status Log_File ≒ [ip-10-0-21-20-bin] : { * :mysql.slave.status[Master_Log_File].str(ip-10-0-21-20-bin)}=0
+    Slave status SQL_Running ≒ [Yes]            : { * :mysql.slave.status[Slave_SQL_Running].str(Yes)}=0
+    Slave status IO_Running ≒ [Yes]             : { * :mysql.slave.status[Slave_IO_Running].str(Yes)}=0  .regexp(Yes)}=0の方がいいか？
+
+    process MySQL non-active                     : { * :proc.num[mysqld].last()}=0      復旧 =1
+    port 3306 listen close                       : { * :net.tcp.listen[3306].last()}=0  復旧 =1
+    Mysql error log [error]                      : { * :log[/var/log/mysqld.log].str(error)}=1  (※Active)
+--------------------------------------------------------------------
 ```
 
 # 個別テスト
@@ -260,3 +256,51 @@ triger : {<Template_name>:mysql.slave.status[Slave_IO_Running].regexp(Yes)}=0
 ネットワークディスカバリによるホストの自動登録
 ```
 
+
+-------------------------------------------------------------------------
+-------------------------------------------------------------------------
+
+
+# 個人的なメモ
+#### 目標
+```
+issue
+  入社した際にZabbix, Cloudwatchの基本操作、会話に齟齬がないように事前に学ぶ
+  ―　Zabbix
+  　　－　一連の手順を理解する
+  　　－　ホストグループ/ホスト/アプリケーション/アイテム/トリガー/アクション/その他グラフなど
+  　　－　アラートが発砲されてからの手順理解
+
+  ―　CloudWatch
+  　　－　一連の操作の流れを理解する
+  　　－　EC2、RDS、ELB、Cloudfront、ElasticCacheの監視項目を理解する
+
+それぞれの監視項目の意味、実際の障害が起きた際の趣味レーションを頭の中でするべし。
+```
+#### 流れ
+```
+・監視項目の洗い出し。
+・監視項目に対応したKeyを調べる。ない場合はUserParameterで定義。
+・ZabbixServerもしくはproxyからのzabbix_getコマンドで値取得を確認。
+・ZabbixWebでアイテムの設定。値を取得できることを確認。
+・トリガーを設定。テストアラートを発報してみる。
+```
+```
+＜共通事項＞
+　プロセスは起動しているか
+　ネットワークの疎通、速度は問題ないか
+　CPU・メモリ・ディスク監視の閾値は異常ではないか
+　時刻同期できているか
+　監視エージェントのログにエラーがでていないか
+
+＜Webサーバー＞
+　ページが見れない　　　　　　　　　　　（名前解決・URL間違い）
+　ページの表示が遅い　　　　　　　　　　（ネットワークスループット？Diskが不適切か、CDNを挟むか）
+　ページのコンテンツの読み込みが遅い　　（キャッシュレイヤーを挟むことも検討）
+　変なページが読み込まれる　　　　　　　（セキュリティ脆弱性・提供者の間違い）
+　時間によって速さが違ったりおそくないか（スケジューリングによるオートスケールの検討）
+　各種ログ
+
+＜Mysql＞
+　マスター、スレーブそれぞれの役割でレプリケーションできているか
+```
