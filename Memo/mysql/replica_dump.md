@@ -323,6 +323,12 @@ http://www.tohoho-web.com/ex/mysql-mysqldump.html
 その他
 https://www.sejuku.net/blog/82770
 
+#### GTID
+https://blog.apar.jp/linux/6725/
+
+#### 自動フェイルオーバー（mysqlfailover）
+https://www.s-style.co.jp/blog/2017/10/1147/
+
 #### 今後リサーチ
 zabbixによるmysqlレプリケーション監視設定
 https://blog.apar.jp/zabbix/3218/

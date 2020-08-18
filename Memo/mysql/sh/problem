@@ -1,0 +1,179 @@
+#! /bin/sh
+
+sudo yum update -y
+
+# [MySQL8.0]
+# ------------------------------------------------------------------------------------------
+# From local PC ※
+# scp -i ~/.ssh/miyake-key.pem ~/mysql_dump_zabbix_20200817.sql ec2-user@<IP>:/home/ec2-user/
+
+sudo rpm -ivh https://dev.mysql.com/get/mysql80-community-release-el7-1.noarch.rpm
+sudo yum -y install mysql-community-server mysql-community-devel
+
+# #default-authentication-plugin=mysql_native_password -> comment in (ver5.7 認証形式)
+sudo sed -i '/^#.*mysql_native.*/s/^# //' /etc/my.cnf
+
+# ここまで確認 #
+
+sudo systemctl start mysqld
+sudo systemctl enable mysqld
+# shellでやるとなぜかmysqldがうまく起動しない
+
+# set env tmp_Password
+TMP_PASSWORD=$(sudo cat /var/log/mysqld.log | grep 'temporary password' | sed -e 's/^.*localhost://' | sed 's/ //g')
+
+# secure config
+mysql_secure_installation
+echo $(TMP_PASSWORD)
+echo ""
+echo $(TMP_PASSWORD)
+echo $(TMP_PASSWORD)
+echo ""
+echo ""
+echo ""
+echo ""
+echo ""
+echo ""
+# or [echo -e "\n"] ??
+
+# set Password (pasword policyの命令文が5.7と若干違う)
+mysql -u root -p$(TMP_PASSWORD)
+SET GLOBAL validate_password.length = 4;
+SET GLOBAL validate_password.policy = LOW;
+SET GLOBAL validate_password.check_user_name = OFF;
+ALTER USER 'root'@'localhost' IDENTIFIED BY 'root';  # user root password root
+
+# Create zabbix user
+create database zabbix character set utf8 collate utf8_bin;
+create user 'zabbix'@'%' identified by 'password';
+grant all on zabbix.* to 'zabbix'@'%';
+flush privileges;
+quit;
+
+# Restore DB
+mysql -u zabbix -p -D zabbix < ./mysql_dump_zabbix_20200817.sql
+
+
+
+# [PHP7.3]
+# ------------------------------------------------------------------------------------------
+# remove php -> epel -> remirepo -> priority change -> php install from remi (check $ rpm -qa | grep php)
+
+sudo yum remove -y php
+sudo yum remove -y php-common
+sudo amazon-linux-extras install -y epel
+sudo yum -y install https://rpms.remirepo.net/enterprise/remi-release-7.rpm  # error!     (sudo rpm -Uvh http://rpms.famillecollet.com/enterprise/remi-release-7.rpm)
+sudo sed -i '/remi-php/a priority=1' /etc/yum.repos.d/remi-php73.repo        # fix!   add <priority=1>
+sudo yum -y install --enablerepo=remi,remi-php73 php php-devel php-pdo php-mysqlnd php-mbstring php-mcrypt php-gd php-pear php-pecl-apc-devel php-bcmath zlib-devel httpd-devel
+
+
+# [Zabbix4.2]
+# ------------------------------------------------------------------------------------------
+sudo rpm -Uvh https://repo.zabbix.com/zabbix/4.2/rhel/7/x86_64/zabbix-release-4.2-1.el7.noarch.rpm
+sudo yum -y install zabbix-agent zabbix-server-mysql
+
+# yum: zabbix-webとPHP5.4の間に依存関係があり、PHP7.3が動作する環境だとエラーが発生してインストールができない
+# rpm: エラーなし
+sudo wget http://repo.zabbix.com/zabbix/4.2/rhel/7/x86_64/zabbix-web-4.2.0-1.el7.noarch.rpm
+sudo wget http://repo.zabbix.com/zabbix/4.2/rhel/7/x86_64/zabbix-web-mysql-4.2.0-1.el7.noarch.rpm
+sudo wget http://repo.zabbix.com/zabbix/4.2/rhel/7/x86_64/zabbix-web-japanese-4.2.0-1.el7.noarch.rpm
+sudo rpm -ivh --nodeps zabbix-web-4.2.0-1.el7.noarch.rpm zabbix-web-mysql-4.2.0-1.el7.noarch.rpm zabbix-web-japanese-4.2.0-1.el7.noarch.rpm
+
+# default [# DBHost=localhost] [DBName=zabbix] [DBUser=zabbix] [# DBPassword=]
+# password=root
+sudo sed -i '/#DBPassword=/a DBPassword=root' /etc/zabbix/zabbix_server.conf
+
+# timezone=Tokyo
+sudo sed -i '/;date.timezone =/a date.timezone = Asia/Tokyo' /etc/php.ini
+
+# Set httpd conf(php5 -> php7, timezone)
+sudo sed -i 's/<.*php5.*/<IfModule mod_php7.c>/' /etc/httpd/conf.d/zabbix.conf
+sudo sed -i 's/#.*timezone.*/php_value date.timezone Asia\/Tokyo/' /etc/httpd/conf.d/zabbix.conf
+
+sudo systemctl start httpd zabbix-server zabbix-agent
+sudo systemctl enable httpd zabbix-server zabbix-agent
+
+# check Browser
+# Done !
+
+
+
+# ------------------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------------------
+# Version UP
+# ------------------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------------------
+
+sudo systemctl stop httpd zabbix-server zabbix-agent
+yum clean all
+# rpm -qa | grep [zabbix, php]
+# sudo sed -i '/remi-php/a priority=1' /etc/yum.repos.d/remi-php73.repo を解除
+
+# Backup
+sudo mkdir /opt/zabbix4-backup/
+sudo cp -p /etc/zabbix/zabbix_server.conf /opt/zabbix4-backup/
+sudo cp -p /etc/httpd/conf.d/zabbix.conf  /opt/zabbix4-backup/
+sudo cp -pR /usr/share/zabbix/ /opt/zabbix4-backup/
+sudo cp -pR /usr/share/doc/zabbix-* /opt/zabbix4-backup/
+
+# Version up
+sudo rpm -Uvh https://repo.zabbix.com/zabbix/5.0/rhel/8/x86_64/zabbix-release-5.0-1.el8.noarch.rpm
+sudo yum update -y zabbix-server-mysql zabbix-web-mysql zabbix-web-japanese zabbix-agent2
+
+# ERROR!!!!!!
+# phpとzabbixの依存関係を無視するために直接ダウンロードしたものがあり、
+# 依存関係のコンフリクトがおきているのでは？
+
+# ...
+#                 php-fpm = 5.4.16-43.amzn2
+#             利用可能: php-fpm-5.4.16-43.amzn2.0.1.x86_64 (amzn2-core)
+#                 php-fpm = 5.4.16-43.amzn2.0.1
+#             利用可能: php-fpm-5.4.16-43.amzn2.0.2.x86_64 (amzn2-core)
+#                 php-fpm = 5.4.16-43.amzn2.0.2
+#             利用可能: php-fpm-5.4.16-43.amzn2.0.3.x86_64 (amzn2-core)
+#                 php-fpm = 5.4.16-43.amzn2.0.3
+#             利用可能: php-fpm-5.4.16-43.amzn2.0.4.x86_64 (amzn2-core)
+#                 php-fpm = 5.4.16-43.amzn2.0.4
+#             利用可能: php-fpm-5.4.16-45.amzn2.0.5.x86_64 (amzn2-core)
+#                 php-fpm = 5.4.16-45.amzn2.0.5
+#             利用可能: php-fpm-5.4.16-45.amzn2.0.6.x86_64 (amzn2-core)
+#                 php-fpm = 5.4.16-45.amzn2.0.6
+#             利用可能: php-fpm-5.4.16-46.amzn2.0.2.x86_64 (amzn2-core)
+#                 php-fpm = 5.4.16-46.amzn2.0.2
+# エラー: パッケージ: zabbix-server-mysql-5.0.2-1.el8.x86_64 (zabbix)
+#              要求: libmariadb.so.3(libmariadb_3)(64bit)
+# エラー: パッケージ: zabbix-server-mysql-5.0.2-1.el8.x86_64 (zabbix)
+#              要求: libssh.so.4(LIBSSH_4_5_0)(64bit)
+# エラー: パッケージ: zabbix-web-5.0.2-1.el8.noarch (zabbix)
+#              要求: php-ldap >= 7.2
+#             利用可能: php-ldap-5.4.16-43.amzn2.x86_64 (amzn2-core)
+#                 php-ldap = 5.4.16-43.amzn2
+#             利用可能: php-ldap-5.4.16-43.amzn2.0.1.x86_64 (amzn2-core)
+#                 php-ldap = 5.4.16-43.amzn2.0.1
+#             利用可能: php-ldap-5.4.16-43.amzn2.0.2.x86_64 (amzn2-core)
+#                 php-ldap = 5.4.16-43.amzn2.0.2
+#             利用可能: php-ldap-5.4.16-43.amzn2.0.3.x86_64 (amzn2-core)
+#                 php-ldap = 5.4.16-43.amzn2.0.3
+#             利用可能: php-ldap-5.4.16-43.amzn2.0.4.x86_64 (amzn2-core)
+#                 php-ldap = 5.4.16-43.amzn2.0.4
+#             利用可能: php-ldap-5.4.16-45.amzn2.0.5.x86_64 (amzn2-core)
+#                 php-ldap = 5.4.16-45.amzn2.0.5
+#             利用可能: php-ldap-5.4.16-45.amzn2.0.6.x86_64 (amzn2-core)
+#                 php-ldap = 5.4.16-45.amzn2.0.6
+#             利用可能: php-ldap-5.4.16-46.amzn2.0.2.x86_64 (amzn2-core)
+#                 php-ldap = 5.4.16-46.amzn2.0.2
+# エラー: パッケージ: zabbix-server-mysql-5.0.2-1.el8.x86_64 (zabbix)
+#              要求: libmariadb.so.3(libmysqlclient_18)(64bit)
+# エラー: パッケージ: zabbix-server-mysql-5.0.2-1.el8.x86_64 (zabbix)
+#              要求: libnetsnmp.so.35()(64bit)
+# エラー: パッケージ: zabbix-server-mysql-5.0.2-1.el8.x86_64 (zabbix)
+#              要求: libevent-2.1.so.6()(64bit)
+# エラー: パッケージ: zabbix-server-mysql-5.0.2-1.el8.x86_64 (zabbix)
+#              要求: libmariadb.so.3()(64bit)
+#  問題を回避するために --skip-broken を用いることができます。
+# ** Found 2 pre-existing rpmdb problem(s), 'yum check' output follows:
+# zabbix-web-4.2.0-1.el7.noarch は次の要求が不足ています:  php-ldap
+# zabbix-web-mysql-4.2.0-1.el7.noarch は次の要求が不足ています:  php-mysql
+
+# 最初からamazon linux 2にzabbix5(php7系)をインストール、起動しようと思ったが同じような依存性エラー発生
+# OSの問題と割り切ってcentos7で試みることにする

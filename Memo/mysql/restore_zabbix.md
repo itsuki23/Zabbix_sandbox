@@ -11,7 +11,7 @@
 ブラウザからEC2_01と同様の設定が反映されているか確認
 ```
 
-# Backup
+# バックアップ
 <EC2_02>
 ```
 ★ DBをロックさせないオプション: --single-transaction
@@ -20,7 +20,7 @@ $ mysqldump -u root -p -h localhost--single-transaction --databases zabbix > ./m
 　( zip mysqldump_zabbix_20200817.sql.zip mysqldump_zabbix_20200817.sql ) -> 今回は圧縮しないでそのままmysql経由で転送する
 ```
 
-# Restore
+# リストア
 <EC2_05>
 ```
 # Zabbixインストール
@@ -69,6 +69,7 @@ $ mysqlbinlog --start-datetime="2005-04-20 10:01:00" \
 $ mysqlbinlog --start-position=368315 \
   --stop-position=368312 mysql_bin.000001 \
   | mysql -u root -ppassword database_name
+
 --------------------------------------------------------------------------------------
 ```
 
