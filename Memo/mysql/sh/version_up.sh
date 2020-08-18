@@ -1,7 +1,4 @@
 #! /bin/sh
-
-
-
 # OS     : CentOS/7  ★ssh user=centos
 # MySQL  : 8.0
 # Zabbix : 5.0
@@ -39,20 +36,19 @@ sudo systemctl enable mysqld                           # something wrong: cant't
 
 # set env tmp_Password
 TMP_PASSWORD=$(sudo cat /var/log/mysqld.log | grep 'temporary password' | sed -e 's/^.*localhost://' | sed 's/ //g')
+# sudo cat /var/log/mysqld.log | grep 'temporary password' | sed -e 's/^.*localhost://' | sed 's/ //g' > TMP_PASSWORD (not_check_yet)
 
-# secure config
-mysql_secure_installation
-echo $(TMP_PASSWORD)
-echo ""
-echo $(TMP_PASSWORD)
-echo $(TMP_PASSWORD)
-echo ""
-echo ""
-echo ""
-echo ""
-echo ""
-echo ""
-# or [echo -e "\n"] ??
+# mysql_secure_installation
+mysqladmin -p$(TMP_PASSWORD) password $(TMP_PASSWORD)
+yes | mysql_secure_installation -p$(TMP_PASSWORD) -D
+# mysql -u root -p$(TMP_PASSWORD)
+# UPDATE mysql.user SET Password=PASSWORD('$(TMP_PASSWORD)') WHERE User='root';
+# DELETE FROM mysql.user WHERE User='';
+# DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1');
+# DROP DATABASE IF EXISTS test;
+# DELETE FROM mysql.db WHERE Db='test' OR Db='test\\_%';
+# FLUSH PRIVILEGES;
+
 
 # set Password (diff validate_query from 5.7)
 mysql -u root -p$(TMP_PASSWORD)
@@ -132,3 +128,5 @@ systemctl enable zabbix-agent zabbix-server rh-php72-php-fpm httpd
 # EC2 centos            (https://dev.classmethod.jp/articles/centos7-initial-settings/)
 # zbx5 flontend install (https://www.zabbix.com/documentation/current/manual/installation/install_from_packages/frontend_on_rhel7)
 # zbx5 centos7 ★       (https://qiita.com/atanaka7/items/429d7a3151542420c944)
+# MySQL secure_insta    (https://qiita.com/MasahitoShinoda/items/9c2d895084b222ac816a)
+# MySQL secure_insta2   (https://github.com/qryuu/aws_on_zabbix/blob/master/UserData/Launch-ZabbixServer-on-AmazonLinux.sh)
